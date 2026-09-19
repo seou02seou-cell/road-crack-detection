@@ -52,7 +52,6 @@ if uploaded_file is not None:
 
         # 3. ROI Mask 생성 (중앙 도로 노면 영역만 추출하여 외곽 풀숲/차선 제외)
         mask = np.zeros_like(thresh)
-        # 도로 중앙 영역 좌표 지정 (상황에 맞게 비율 조정 가능)
         polygon = np.array([[
             (int(w * 0.1), h),
             (int(w * 0.3), int(h * 0.4)),
@@ -97,7 +96,29 @@ if uploaded_file is not None:
             st.image(res_rgb, use_container_width=True)
 
         st.divider()
+        
+        # 5. 검사 결과 요약 및 통계
         if len(crack_contours) == 0:
             st.success("✅ [검사 결과] 균열이 발견되지 않았습니다. (정상 도로)")
         else:
             st.error(f"⚠️ [검사 결과] 균열이 감지되었습니다! (총 {len(crack_contours)}개 영역)")
+
+        # 6. [신규 기능] 다운로드 버튼 및 결과 내보내기
+        st.write("")
+        d_col1, d_col2 = st.columns([1, 1])
+        
+        with d_col1:
+            # OpenCV 결과(BGR)를 PNG 바이트 데이터로 인코딩
+            is_success, buffer = cv2.imencode(".png", result_img)
+            if is_success:
+                byte_im = buffer.tobytes()
+                st.download_button(
+                    label="📥 균열 감지 결과 이미지 다운로드",
+                    data=byte_im,
+                    file_name="road_crack_result.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+
+        with d_col2:
+            st.caption(f"ℹ️ 최소 감지 기준 면적: `{min_area}`px | 명암 비교 범위: `{block_size}`")
