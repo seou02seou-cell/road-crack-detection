@@ -5,7 +5,7 @@ import streamlit as st
 st.set_page_config(page_title="도로 균열 감지 시스템", page_icon="🛣️", layout="wide")
 
 st.title("🛣️ 도로 균열 감지 웹 애플리케이션")
-st.write("도로 이미지(PNG, JPG)를 업로드하면 관심 영역(ROI) 기반 OpenCV 처리로 균열을 감지합니다.")
+st.write("도로 이미지(PNG, JPG)를 업로드하거나 카메라로 촬영하여 관심 영역(ROI) 기반 OpenCV 처리로 균열을 감지합니다.")
 st.divider()
 
 # 세션 초기화
@@ -26,9 +26,17 @@ with sb_col2:
 min_area = st.sidebar.slider("최소 균열 크기", 10, 1000, key="min_area", step=10)
 block_size = st.sidebar.slider("명암 비교 범위", 3, 31, key="block_size", step=2)
 
-file_input = st.file_uploader("검사할 도로 이미지를 업로드하세요", type=["png", "jpg", "jpeg"])
-if file_input is not None:
-    st.session_state.uploaded_file = file_input
+# 입력 방식 선택 (파일 업로드 / 카메라 촬영)
+input_mode = st.radio("입력 방식을 선택하세요", ["📁 파일 업로드", "📷 카메라 촬영"], horizontal=True)
+
+if input_mode == "📁 파일 업로드":
+    file_input = st.file_uploader("검사할 도로 이미지를 업로드하세요", type=["png", "jpg", "jpeg"])
+    if file_input is not None:
+        st.session_state.uploaded_file = file_input
+else:
+    file_input = st.camera_input("도로 현장 사진을 촬영하세요")
+    if file_input is not None:
+        st.session_state.uploaded_file = file_input
 
 uploaded_file = st.session_state.get("uploaded_file", None)
 
