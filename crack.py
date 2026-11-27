@@ -1,8 +1,26 @@
+#  ★12. [crack_3 오류 수정] 안드로이드 갤러리 사진(HEIC/HEIF) 업로드 지원
+#       - 갤러리 사진이 .heic 형식이면 업로더가 허용 목록에 없어 거부되고,
+#         OpenCV도 HEIC를 읽지 못해 분석이 되지 않았음
+#       - 업로드 허용 형식에 heic, heif를 추가하고, 읽기에 실패하면 pillow-heif로 대신 읽음
+#       - PNG/JPG는 기존과 완전히 같은 방식(cv2.imdecode)으로 읽으므로 결과가 달라지지 않음
+#       - ※ requirements.txt에 pillow-heif 한 줄이 추가로 필요함
+
+import io  # ★12 HEIC 읽기용
 import time
 
 import cv2
 import numpy as np
 import streamlit as st
+from PIL import Image, ImageOps  # ★12 HEIC 읽기용 (streamlit 설치 시 함께 설치됨)
+
+# ★12 HEIC/HEIF 해독기 등록 (pillow-heif가 없어도 프로그램이 멈추지 않도록 보호)
+try:
+  from pillow_heif import register_heif_opener
+
+  register_heif_opener()
+  HEIF_OK = True
+except Exception:
+  HEIF_OK = False
 
 st.set_page_config(
     page_title="도로 균열 감지 웹 애플리케이션", page_icon="🛣️", layout="wide"
@@ -68,6 +86,24 @@ def is_crack_shape(cnt, min_ratio):
   ratio = long_side / short_side
   fill_ratio = cv2.contourArea(cnt) / max(rw * rh, 1.0)
   return ratio >= min_ratio or fill_ratio <= MAX_FILL_RATIO
+
+
+def decode_image(data):
+  """★12 업로드된 파일 내용(bytes)을 OpenCV용 BGR 이미지로 바꾼다.
+
+  1) 먼저 기존과 똑같이 cv2.imdecode로 읽음 → PNG/JPG는 여기서 끝나므로 결과 동일
+  2) 실패하면(HEIC/HEIF 등) pillow-heif + PIL로 읽어 BGR로 변환
+     - exif_transpose: 휴대폰 사진의 회전 정보를 반영해 사진이 옆으로 눕지 않게 함
+  3) 그래도 안 되면 None 반환 → 호출하는 쪽에서 오류 안내를 보여 줌
+  """
+  img = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+  if img is not None:
+    return img
+  try:
+    pil_img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+  except Exception:
+    return None
 
 
 def detect_cracks(org_img, p):
@@ -237,7 +273,7 @@ uploaded_file = None
 if input_mode == "📁 파일 업로드":
   uploaded_file = st.file_uploader(
       "검사할 도로 이미지를 업로드하세요",
-      type=["png", "jpg", "jpeg"],
+      type=["png", "jpg", "jpeg", "heic", "heif"],  # ★12 갤러리 HEIC 사진 허용
       on_change=on_upload_file,
   )
 else:
@@ -276,11 +312,11 @@ if (
     is_from_history = True
 
 elif uploaded_file is not None:
-  file_bytes = np.frombuffer(uploaded_file.getvalue(), dtype=np.uint8)
-  org_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+  # ★12 cv2.imdecode 직접 호출 → decode_image(): HEIC도 읽을 수 있게 함
+  org_img = decode_image(uploaded_file.getvalue())
 
   if org_img is None:
-    st.error("❌ 이미지를 읽을 수 없습니다. PNG 또는 JPG 파일인지 확인해 주세요.")
+    st.error("❌ 이미지를 읽을 수 없습니다. PNG, JPG 또는 HEIC 파일인지 확인해 주세요.")
   else:
     t0 = time.perf_counter()
     out = detect_cracks(org_img, params)
